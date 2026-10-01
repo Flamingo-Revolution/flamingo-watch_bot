@@ -1,0 +1,101 @@
+# Phase 1: fetch new Flamingo Watch stories, render cards, post to Discord via
+# webhook. State (seen story keys) lives on the orphan `bot-state` branch, never
+# on main. See docs/BOT.md for configuration and docs/bot-discovery.md for the
+# feed decisions this relies on.
+name: ig-cards
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (render cards, do not post to Discord)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # needed to push state.json to bot-state
+
+concurrency:
+  group: ig-bot
+  cancel-in-progress: false
+
+jobs:
+  post-cards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout (or create) bot-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REPO_URL" bot-state > /dev/null 2>&1; then
+            git clone --quiet --branch bot-state --single-branch "$REPO_URL" state
+          else
+            echo "bot-state branch does not exist yet -- creating it"
+            mkdir state
+            git -C state init --quiet -b bot-state
+            echo '{}' > state/state.json
+            git -C state config user.name "flamingo-watch-bot"
+            git -C state config user.email "actions@users.noreply.github.com"
+            git -C state add state.json
+            git -C state commit --quiet -m "init bot-state"
+            git -C state remote add origin "$REPO_URL"
+            git -C state push --quiet origin bot-state
+          fi
+          git -C state config user.name "flamingo-watch-bot"
+          git -C state config user.email "actions@users.noreply.github.com"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Post cards
+        id: post
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          CARD_LANG: ${{ vars.CARD_LANG }}
+          HASHTAGS: ${{ vars.HASHTAGS }}
+          MAX_PER_RUN: ${{ vars.MAX_PER_RUN }}
+          FIRST_RUN_POST: ${{ vars.FIRST_RUN_POST }}
+          FEED_URL: ${{ vars.FEED_URL }}
+          STATE_PATH: state/state.json
+          OUT_DIR: out
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python scripts/cards_to_discord.py --dry-run
+          else
+            python scripts/cards_to_discord.py
+          fi
+
+      - name: Upload dry-run cards
+        if: inputs.dry_run == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: cards
+          path: out/*.jpg
+          if-no-files-found: ignore
+
+      - name: Commit state if changed
+        if: always()
+        working-directory: state
+        run: |
+          git add state.json
+          if ! git diff --cached --quiet; then
+            git commit --quiet -m "update state [skip ci]"
+            git push --quiet origin bot-state
+          else
+            echo "state.json unchanged, nothing to commit"
+          fi
