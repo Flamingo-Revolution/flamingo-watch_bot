@@ -24,6 +24,8 @@ PINK = (255, 62, 165)       # #FF3EA5
 TEXT = (245, 245, 240)      # #F5F5F0
 MUTED = (154, 154, 148)     # #9A9A94
 SOFT = (216, 216, 210)      # #D8D8D2
+DIM = (104, 104, 98)        # quiet footnote color for the safety label -- still legible,
+                             # deliberately not decorative (CLAUDE.md section 1: never remove)
 
 ASSETS_DIR = Path(__file__).parent / "assets"
 FONTS_DIR = Path(__file__).parent / "fonts"
@@ -147,7 +149,7 @@ def render(story: Story, lang: str) -> bytes:
     summary_lines = (_wrap(draw, story.summary, summary_font, W - PAD * 2, SUMMARY_MAX_LINES)
                       if story.summary else [])
 
-    unverified_font = _font(PLEX_REGULAR, 24)
+    unverified_font = _font(PLEX_REGULAR, 19)
     source_font = _font(PLEX_BOLD, 32)
     source_text = f"Source: {story.source}"
     unverified_bbox = draw.textbbox((0, 0), SAFETY_LABEL, font=unverified_font)
@@ -184,8 +186,8 @@ def render(story: Story, lang: str) -> bytes:
     # zone_bottom, not to the content above, so its position (and the ribbon's) never
     # moves regardless of how short or long the story is.
     unverified_y = zone_bottom - unverified_h
-    draw.text((PAD, unverified_y), SAFETY_LABEL, font=unverified_font, fill=MUTED)
-    source_y = unverified_y - 10 - source_h
+    draw.text((PAD, unverified_y), SAFETY_LABEL, font=unverified_font, fill=DIM)
+    source_y = unverified_y - 8 - source_h
     draw.text((PAD, source_y), source_text, font=source_font, fill=TEXT)
 
     ribbon = _ribbon()
