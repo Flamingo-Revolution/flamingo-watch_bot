@@ -24,8 +24,6 @@ PINK = (255, 62, 165)       # #FF3EA5
 TEXT = (245, 245, 240)      # #F5F5F0
 MUTED = (154, 154, 148)     # #9A9A94
 SOFT = (216, 216, 210)      # #D8D8D2
-DIM = (104, 104, 98)        # quiet footnote color for the safety label -- still legible,
-                             # deliberately not decorative (CLAUDE.md section 1: never remove)
 
 ASSETS_DIR = Path(__file__).parent / "assets"
 FONTS_DIR = Path(__file__).parent / "fonts"
@@ -36,7 +34,6 @@ PLEX_REGULAR = FONTS_DIR / "IBMPlexSans-Regular.ttf"
 PLEX_SEMIBOLD = FONTS_DIR / "IBMPlexSans-SemiBold.ttf"
 PLEX_BOLD = FONTS_DIR / "IBMPlexSans-Bold.ttf"
 
-SAFETY_LABEL = "Automated summary, unverified"
 SITE_TAPE_TEXT = "FLAMINGO-WATCH.COM"
 
 TITLE_MAX_LINES = 6
@@ -149,14 +146,11 @@ def render(story: Story, lang: str) -> bytes:
     summary_lines = (_wrap(draw, story.summary, summary_font, W - PAD * 2, SUMMARY_MAX_LINES)
                       if story.summary else [])
 
-    unverified_font = _font(PLEX_REGULAR, 19)
     source_font = _font(PLEX_BOLD, 32)
     source_text = f"Source: {story.source}"
-    unverified_bbox = draw.textbbox((0, 0), SAFETY_LABEL, font=unverified_font)
     source_bbox = draw.textbbox((0, 0), source_text, font=source_font)
-    unverified_h = unverified_bbox[3] - unverified_bbox[1]
     source_h = source_bbox[3] - source_bbox[1]
-    compliance_h = source_h + 10 + unverified_h
+    compliance_h = source_h
 
     # Title + divider + summary + compliance block, as a single unit. Short stories
     # (no AI summary, common -- see docs/bot-discovery.md) would otherwise leave a
@@ -181,13 +175,10 @@ def render(story: Story, lang: str) -> bytes:
     if summary_lines:
         _draw_lines(draw, summary_lines, PAD, y, summary_font, SOFT, line_height=summary_line_h)
 
-    # Compliance block: plain, horizontal, never rotated into the ribbon -- this is
-    # the safety label (CLAUDE.md section 1), not decoration. Anchored to the fixed
-    # zone_bottom, not to the content above, so its position (and the ribbon's) never
-    # moves regardless of how short or long the story is.
-    unverified_y = zone_bottom - unverified_h
-    draw.text((PAD, unverified_y), SAFETY_LABEL, font=unverified_font, fill=DIM)
-    source_y = unverified_y - 8 - source_h
+    # Source credit: plain, horizontal, never rotated into the ribbon. Anchored to the
+    # fixed zone_bottom, not to the content above, so its position (and the ribbon's)
+    # never moves regardless of how short or long the story is.
+    source_y = zone_bottom - source_h
     draw.text((PAD, source_y), source_text, font=source_font, fill=TEXT)
 
     ribbon = _ribbon()
