@@ -8,6 +8,7 @@ Instagram feed ratio. See docs/bot-discovery.md and CLAUDE.md section 5.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 
@@ -40,10 +41,27 @@ TITLE_MAX_LINES = 6
 SUMMARY_MAX_LINES = 8
 
 
+@lru_cache(maxsize=None)
 def _font(path: Path, size: int) -> ImageFont.FreeTypeFont:
     # Intentionally not wrapped in try/except: a missing bundled font must raise,
     # never silently fall back to Pillow's bitmap default (CLAUDE.md section 5).
+    # Cached: a single render loads each (font, size) pair at most once instead of
+    # re-reading the TTF from disk for every card in a batch.
     return ImageFont.truetype(str(path), size)
+
+
+def _fit_word(draw: ImageDraw.ImageDraw, word: str, font: ImageFont.FreeTypeFont,
+              max_width: int) -> str:
+    """A single word wider than max_width on its own (e.g. a raw URL or an
+    unbroken compound in AI-generated text we don't fully control) would otherwise
+    overflow the card uncut, since _wrap only breaks on whitespace. Trim it to fit,
+    same character-trim-with-ellipsis technique as the last-line truncation below."""
+    if draw.textlength(word, font=font) <= max_width:
+        return word
+    trimmed = word
+    while trimmed and draw.textlength(trimmed + "…", font=font) > max_width:
+        trimmed = trimmed[:-1]
+    return (trimmed + "…") if trimmed else word[:1]
 
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont,
@@ -52,6 +70,7 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont,
     algorithm the live site uses in share-image.js's wrap(), so truncation behaves
     identically: '...' is added only when a line was actually cut off."""
     words = [w for w in re.split(r"\s+", text or "") if w]
+    words = [_fit_word(draw, w, font, max_width) for w in words]
     lines: list[str] = []
     line = ""
     for w in words:

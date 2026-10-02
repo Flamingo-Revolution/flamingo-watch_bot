@@ -68,3 +68,30 @@ def test_wrap_adds_ellipsis_only_when_actually_truncated():
 def test_missing_bundled_font_raises_instead_of_silent_fallback(tmp_path):
     with pytest.raises(Exception):
         card._font(tmp_path / "does-not-exist.ttf", 40)
+
+
+def test_font_is_cached_across_calls():
+    a = card._font(card.PLEX_REGULAR, 38)
+    b = card._font(card.PLEX_REGULAR, 38)
+    assert a is b  # same (font, size) pair must not re-read the TTF from disk
+
+
+def test_wrap_truncates_a_single_word_wider_than_max_width():
+    draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    font = card._font(card.PLEX_REGULAR, 38)
+
+    unbroken = "a" * 500  # no whitespace at all -- nothing for _wrap to break on
+    lines = card._wrap(draw, unbroken, font, max_width=900, max_lines=6)
+    assert len(lines) == 1
+    assert lines[0].endswith("…")
+    assert draw.textlength(lines[0], font=font) <= 900
+
+
+def test_wrap_truncates_long_word_in_the_middle_of_normal_text():
+    draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    font = card._font(card.PLEX_REGULAR, 38)
+
+    text = "normal words then " + ("b" * 500) + " and more normal words after"
+    lines = card._wrap(draw, text, font, max_width=900, max_lines=6)
+    for line in lines:
+        assert draw.textlength(line, font=font) <= 900

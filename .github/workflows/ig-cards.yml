@@ -89,7 +89,10 @@ jobs:
           if-no-files-found: ignore
 
       - name: Commit state if changed
-        if: always()
+        # Defense in depth: a dry run must never touch bot-state, full stop, even if
+        # a future bug in the Python code writes state.json anyway (this is exactly
+        # how an earlier bug slipped through -- the app-level fix alone isn't enough).
+        if: always() && inputs.dry_run != true
         working-directory: state
         run: |
           git add state.json
