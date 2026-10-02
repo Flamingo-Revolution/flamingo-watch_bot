@@ -123,6 +123,28 @@ def test_dry_run_never_calls_discord_and_writes_jpgs(tmp_path, monkeypatch):
     assert len(list(out_dir.glob("*.jpg"))) == 3
 
 
+def test_dry_run_leaves_no_state_footprint(tmp_path, monkeypatch):
+    """Regression test: an earlier bug saved state.json during --dry-run, which (once
+    committed to bot-state by the workflow) silently consumed the real run's first-run
+    seeding, leaving nothing left to actually post. --dry-run must never write state."""
+    monkeypatch.setattr(cards_to_discord.feed, "fetch", lambda lang, **kw: list(NEWEST_FIRST))
+    monkeypatch.setattr(cards_to_discord.discord_webhook, "post", lambda *a, **kw: None)
+
+    state_path = tmp_path / "state.json"
+    dry_count = cards_to_discord.run(lang="sq", max_per_run=5, first_run_post=3,
+                                      webhook_url=None, hashtags="#Albania",
+                                      state_path=state_path, dry_run=True,
+                                      out_dir=tmp_path / "out")
+    assert dry_count == 3
+    assert not state_path.exists()  # no footprint at all
+
+    real_count = cards_to_discord.run(lang="sq", max_per_run=5, first_run_post=3,
+                                       webhook_url="https://discord.example/webhook",
+                                       hashtags="#Albania", state_path=state_path,
+                                       dry_run=False, out_dir=tmp_path / "out")
+    assert real_count == 3  # still a first run -- dry-run didn't consume it
+
+
 def test_build_message_hard_capped_at_1990_chars():
     story = NEWEST_FIRST[0]
     msg = cards_to_discord.build_message(story, "caption " * 500)

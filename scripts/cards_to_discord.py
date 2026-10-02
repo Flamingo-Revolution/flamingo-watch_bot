@@ -95,13 +95,15 @@ def run(*, lang: str, max_per_run: int, first_run_post: int, webhook_url: str | 
             continue
 
         state_mod.mark_seen(state, story.key)
-        state_mod.save(state_path, state)
+        if not dry_run:
+            state_mod.save(state_path, state)  # --dry-run must leave no footprint
         posted += 1
 
     if to_seed:
         for story in to_seed:
             state_mod.mark_seen(state, story.key)
-        state_mod.save(state_path, state)
+        if not dry_run:
+            state_mod.save(state_path, state)
 
     log.info("done: %d posted this run", posted)
     return posted
